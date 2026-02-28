@@ -6,6 +6,7 @@ local RunService = game:GetService("RunService")
 local LocalPlayer = game:GetService("Players").LocalPlayer
 local Mouse = LocalPlayer:GetMouse()
 local HttpService = game:GetService("HttpService")
+local TextService = game:GetService("TextService")
 
 local OrionLib = {
 	Elements = {},
@@ -46,43 +47,54 @@ local function GetIcon(IconName)
 	end
 end   
 
+local CoreGui = game:GetService("CoreGui")
 local Orion = Instance.new("ScreenGui")
 Orion.Name = "Orion"
-if syn then
-	syn.protect_gui(Orion)
-	Orion.Parent = game.CoreGui
-else
-	Orion.Parent = gethui() or game.CoreGui
+
+local OrionParent = CoreGui
+if type(gethui) == "function" then
+	local Ok, Hui = pcall(gethui)
+	if Ok and typeof(Hui) == "Instance" then
+		OrionParent = Hui
+	end
 end
 
-if gethui then
-	for _, Interface in ipairs(gethui():GetChildren()) do
-		if Interface.Name == Orion.Name and Interface ~= Orion then
-			Interface:Destroy()
-		end
+if syn and type(syn.protect_gui) == "function" then
+	pcall(syn.protect_gui, Orion)
+end
+
+local function DestroyDuplicateOrion(Parent)
+	if typeof(Parent) ~= "Instance" then
+		return
 	end
-else
-	for _, Interface in ipairs(game.CoreGui:GetChildren()) do
+	for _, Interface in ipairs(Parent:GetChildren()) do
 		if Interface.Name == Orion.Name and Interface ~= Orion then
 			Interface:Destroy()
 		end
 	end
 end
+
+DestroyDuplicateOrion(CoreGui)
+if OrionParent ~= CoreGui then
+	DestroyDuplicateOrion(OrionParent)
+end
+
+Orion.Parent = OrionParent
 
 function OrionLib:IsRunning()
-	if gethui then
-		return Orion.Parent == gethui()
-	else
-		return Orion.Parent == game:GetService("CoreGui")
-	end
-
+	return Orion ~= nil and Orion.Parent ~= nil
 end
 
 local function AddConnection(Signal, Function)
-	if (not OrionLib:IsRunning()) then
+	if typeof(Signal) ~= "RBXScriptSignal" then
 		return
 	end
-	local SignalConnect = Signal:Connect(Function)
+	local Ok, SignalConnect = pcall(function()
+		return Signal:Connect(Function)
+	end)
+	if not Ok or not SignalConnect then
+		return
+	end
 	table.insert(OrionLib.Connections, SignalConnect)
 	return SignalConnect
 end
@@ -842,8 +854,28 @@ function OrionLib:MakeWindow(WindowConfig)
 				}), "Second")
 
 				AddConnection(ParagraphFrame.Content:GetPropertyChangedSignal("Text"), function()
-					ParagraphFrame.Content.Size = UDim2.new(1, -24, 0, ParagraphFrame.Content.TextBounds.Y)
-					ParagraphFrame.Size = UDim2.new(1, 0, 0, ParagraphFrame.Content.TextBounds.Y + 35)
+					local width = math.max(1, ParagraphFrame.AbsoluteSize.X - 24)
+					local bounds = TextService:GetTextSize(
+						ParagraphFrame.Content.Text or "",
+						ParagraphFrame.Content.TextSize,
+						ParagraphFrame.Content.Font,
+						Vector2.new(width, math.huge)
+					)
+					local contentHeight = math.max(14, bounds.Y, ParagraphFrame.Content.TextBounds.Y)
+					ParagraphFrame.Content.Size = UDim2.new(1, -24, 0, contentHeight)
+					ParagraphFrame.Size = UDim2.new(1, 0, 0, contentHeight + 35)
+				end)
+				AddConnection(ParagraphFrame:GetPropertyChangedSignal("AbsoluteSize"), function()
+					local width = math.max(1, ParagraphFrame.AbsoluteSize.X - 24)
+					local bounds = TextService:GetTextSize(
+						ParagraphFrame.Content.Text or "",
+						ParagraphFrame.Content.TextSize,
+						ParagraphFrame.Content.Font,
+						Vector2.new(width, math.huge)
+					)
+					local contentHeight = math.max(14, bounds.Y, ParagraphFrame.Content.TextBounds.Y)
+					ParagraphFrame.Content.Size = UDim2.new(1, -24, 0, contentHeight)
+					ParagraphFrame.Size = UDim2.new(1, 0, 0, contentHeight + 35)
 				end)
 
 				ParagraphFrame.Content.Text = Content
